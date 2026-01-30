@@ -3,6 +3,8 @@
 
 // interesting idea: https://docs.rs/error-stack/latest/error_stack/
 
+// todo: error stream merging
+
 /*
 
 Ways to access the buffer (no_std):
@@ -25,6 +27,7 @@ mod tagget_error_buf;
 #[path = "std_thread_local_bufs.rs"]
 pub mod thread_local_bufs;
 
+// fixme: embedded thread local bufs are not finished
 #[cfg(not(feature = "std"))]
 #[cfg(feature = "thread-local-errors")]
 #[cfg(target_arch = "arm")]
@@ -79,6 +82,7 @@ pub trait ReportContext {
 
 pub trait Context {
     fn context(self, f: fmt::Arguments) -> Self;
+    fn context_str(self, f: &'static str) -> Self;
     fn with_context<R: core::any::Any>(self, f: impl FnOnce(&mut FrameBuilder<'_>) -> R) -> Self;
 }
 
@@ -120,6 +124,16 @@ impl<'a, T, E> Context for Result<T, LtReport<'a, E>> {
             let (buf, stream) = token.resplit();
             let mut buf = buf.borrow_mut();
             _ = FrameBuilder(&mut *buf, stream).write_fmt(f);
+            buf.push_entry(FrameEntry::EndOfFrame(stream));
+        }
+        self
+    }
+    fn context_str(self, s: &'static str) -> Self {
+        if let Err(LtReport(Some(ref token))) = self {
+            let (buf, stream) = token.resplit();
+            let mut buf = buf.borrow_mut();
+            buf.push_entry(FrameEntry::from_static_str(stream, s));
+            buf.push_entry(FrameEntry::EndOfFrame(stream));
         }
         self
     }
@@ -301,6 +315,67 @@ Caused by:
                 write!(f, "{}", y)?;
                 write!(f, " we have seen an error")
             })?;
+
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn simple_multi_level() {
+        #[derive(Debug)]
+        struct MyError;
+
+        impl std::error::Error for MyError {}
+        impl std::fmt::Display for MyError {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "An error occurred.")
+            }
+        }
+
+        let buf = ReportBuf::new();
+        let e = foo(&buf, 13, 42, 69).unwrap_err();
+
+        let mut out = String::new();
+        write!(&mut out, "{}", e.report().unwrap()).unwrap();
+        assert_eq!(
+            out,
+            "\
+Error: An error occurred.
+
+Caused by:
+  0: In `quix` at 69 we have seen an error
+  1: In `baz` we have seen some error
+  2: In `bar` at 42 we have seen an error
+  3: In `foo` at 13 we have seen an error
+"
+        );
+
+        #[inline(never)]
+        fn foo(buf: &ReportBuf, x: usize, y: usize, z: usize) -> Result<(), LtReport<'_, MyError>> {
+            bar(buf, y, z).context(format_args!("In `foo` at {x} we have seen an error"))?;
+
+            Ok(())
+        }
+
+        #[inline(never)]
+        fn bar(buf: &ReportBuf, y: usize, z: usize) -> Result<(), LtReport<'_, MyError>> {
+            baz(buf, z).context(format_args!("In `bar` at {y} we have seen an error"))?;
+
+            Ok(())
+        }
+
+        #[inline(never)]
+        fn baz(buf: &ReportBuf, z: usize) -> Result<(), LtReport<'_, MyError>> {
+            quix(buf, z).context_str("In `baz` we have seen some error")?;
+
+            Ok(())
+        }
+
+        #[inline(never)]
+        fn quix(buf: &ReportBuf, z: usize) -> Result<(), LtReport<'_, MyError>> {
+            let err = || Err(MyError.e(&buf));
+
+            err().context(format_args!("In `quix` at {z} we have seen an error"))?;
 
             Ok(())
         }

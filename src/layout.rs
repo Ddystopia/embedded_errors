@@ -239,7 +239,7 @@ impl ReportBufInner {
 impl Write for FrameBuilder<'_> {
     fn write_fmt(&mut self, args: fmt::Arguments<'_>) -> fmt::Result {
         if let Some(s) = args.as_str() {
-            let entry = FrameEntry::Static(self.1, s.as_ptr(), s.len());
+            let entry = FrameEntry::from_static_str(self.1, s);
             Ok(self.0.push_entry(entry))
         } else {
             core::fmt::write(self, args)
@@ -248,7 +248,7 @@ impl Write for FrameBuilder<'_> {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         #[cfg(feature = "unsafe-static-str-ranges")]
         if let Some(s) = crate::unsafe_static_str_ranges::try_to_static(s) {
-            let entry = FrameEntry::Static(self.1, s.as_ptr(), s.len());
+            let entry = FrameEntry::from_static_str(self.1, s);
             self.0.push_entry(entry);
             return Ok(());
         }
@@ -273,11 +273,16 @@ impl FrameEntry {
     const RANGE: u16 = 0b1000_0000_0000_0000;
     const MAX_LEN: u16 = 0x7FF0;
 
-    pub fn is_end_of_frame(&self) -> bool {
+    pub const fn is_end_of_frame(&self) -> bool {
         matches!(self, FrameEntry::EndOfFrame(_))
     }
 
-    pub fn stream(&self) -> Stream {
+    pub const fn from_static_str(stream: Stream, string: &'static str) -> Self {
+        let len = string.len();
+        Self::Static(stream, string.as_ptr(), len)
+    }
+
+    pub const fn stream(&self) -> Stream {
         match self {
             FrameEntry::Static(s, _, _)
             | FrameEntry::Offset(s, _, _)

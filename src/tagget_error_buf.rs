@@ -4,7 +4,7 @@ use crate::{ReportBuf, layout::Stream};
 
 // Invariant: `E` is stored at `Stream` where the tag points
 // Invariant: tag is a valid `Stream`
-// todo: NonNull 
+// todo: NonNull
 pub(crate) struct TaggetErrorBufPtr<'a, E>(PhantomData<(&'a E, &'a ReportBuf)>, *const ReportBuf);
 
 pub(crate) fn replace_error<'a, E1, E2>(
