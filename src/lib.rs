@@ -83,7 +83,7 @@ pub trait ReportContext {
 pub trait Context {
     fn context(self, f: fmt::Arguments) -> Self;
     fn context_str(self, f: &'static str) -> Self;
-    fn with_context<R: core::any::Any>(self, f: impl FnOnce(&mut FrameBuilder<'_>) -> R) -> Self;
+    fn with_context<R>(self, f: impl FnOnce(&mut FrameBuilder<'_>) -> R) -> Self;
 }
 
 pub trait ErrorExt: Sized + core::error::Error {
@@ -137,7 +137,7 @@ impl<'a, T, E> Context for Result<T, LtReport<'a, E>> {
         }
         self
     }
-    fn with_context<R: core::any::Any>(self, f: impl FnOnce(&mut FrameBuilder<'_>) -> R) -> Self {
+    fn with_context<R>(self, f: impl FnOnce(&mut FrameBuilder<'_>) -> R) -> Self {
         if let Err(LtReport(Some(ref token))) = self {
             let (buf, stream) = token.resplit();
             let mut buf = buf.borrow_mut();
@@ -151,6 +151,9 @@ impl<'a, T, E> Context for Result<T, LtReport<'a, E>> {
 impl ReportBuf {
     pub const fn new() -> Self {
         Self(RefCell::new(ReportBufInner::new()))
+    }
+    pub fn is_full(&self) -> bool {
+        self.0.borrow().is_full()
     }
     fn borrow_mut(&self) -> core::cell::RefMut<'_, ReportBufInner> {
         self.0.borrow_mut()

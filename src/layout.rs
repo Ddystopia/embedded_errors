@@ -133,12 +133,17 @@ impl ReportBufInner {
             .as_mut_ptr()
             .cast::<E>()
     }
+    pub fn is_full(&self) -> bool {
+        let stream = (self.used_errors_mask | 1).trailing_ones() as UsedErrorsMask;
+        stream as usize - 1 == ERROR_COUNT
+    }
     // stream 0 is reserved
     pub fn new_stream<E>(&mut self, err: E) -> Option<Stream> {
         let stream = (self.used_errors_mask | 1).trailing_ones() as UsedErrorsMask;
         if stream as usize - 1 == ERROR_COUNT {
             return None;
         }
+        debug_assert!(!self.is_full());
         // Safety: `∀x ∈ uint (x | 1).trailing_ones() > 0`
         let stream = unsafe { Stream::new_uncheked(stream as u8) };
         self.used_errors_mask |= stream.mask();
