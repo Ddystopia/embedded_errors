@@ -1,0 +1,13 @@
+[package]
+name = "embedded_errors"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["std", "thread-local-errors"]
+std = []
+thread-local-errors = []
+unsafe-static-str-ranges = []
+
+[dependencies]
+const-generic-alignment = "0.3.0"
