@@ -33,18 +33,19 @@ pub mod thread_local_bufs;
 
 #[cfg(feature = "unsafe-static-str-ranges")]
 mod unsafe_static_str_ranges {
+    #[allow(improper_ctypes)]
     unsafe extern "C" {
         #[link_name = "__data_start__"]
-        static DATA_START: u8;
+        static DATA_START: ();
         #[link_name = "__data_end__"]
-        static DATA_END: u8;
+        static DATA_END: ();
     }
     pub fn try_to_static(s: &str) -> Option<&'static str> {
-        let p = s.as_ptr() as *const u8;
+        let p = s.as_ptr().cast::<()>();
         let start = &raw const DATA_START;
         let end = &raw const DATA_END;
         if (start <= p) && (p < end) {
-            Some(unsafe { core::mem::transmute::<&str, &'static str>(s) })
+            Some(unsafe { &*core::ptr::from_ref(s) })
         } else {
             None
         }
